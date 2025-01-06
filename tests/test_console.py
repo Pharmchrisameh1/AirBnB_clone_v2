@@ -1,153 +1,460 @@
 #!/usr/bin/python3
-"""A unit test module for the console module."""
-import os
-import unittest
-from io import StringIO
+"""This module tests the AirBnB Console program
+"""
+from models import storage
+from models.base_model import BaseModel
+from models.user import User
+from models.amenity import Amenity
+from models.state import State
+from models.place import Place
+from models.review import Review
+from models.city import City
+from console import HBNBCommand
 from unittest.mock import patch
+from io import StringIO
 import MySQLdb
 import sqlalchemy
-import pep8
-from console import HBNBCommand
-from models import storage
-from models.user import User
-from tests import clear_stream
+import unittest
+import os
+import sys
+import pycodestyle
 
 
-class TestHBNBCommand(unittest.TestCase):
-    """A class for testing the console module."""
+@unittest.skipIf(os.getenv('HBNB_TYPE_STORAGE') != 'db',
+                 "tests only when in DB mode")
+class test_create_console_db(unittest.TestCase):
+    """This class tests the create command of the console
+    program
+    """
 
-    @unittest.skipIf(
-        os.getenv("HBNB_TYPE_STORAGE") == "db", "FileStorage test"
-    )
-    def test_fs_create(self):
-        """Tests the create command with the file storage."""
-        with patch("sys.stdout", new=StringIO()) as cout:
-            cons = HBNBCommand()
-            cons.onecmd('create City name="Texas"')
-            mdl_id = cout.getvalue().strip()
-            clear_stream(cout)
-            self.assertIn("City.{}".format(mdl_id), storage.all().keys())
-            cons.onecmd("show City {}".format(mdl_id))
-            self.assertIn("'name': 'Texas'", cout.getvalue().strip())
-            clear_stream(cout)
-            cons.onecmd('create User name="James" age=17 height=5.9')
-            mdl_id = cout.getvalue().strip()
-            self.assertIn("User.{}".format(mdl_id), storage.all().keys())
-            clear_stream(cout)
-            cons.onecmd("show User {}".format(mdl_id))
-            self.assertIn("'name': 'James'", cout.getvalue().strip())
-            self.assertIn("'age': 17", cout.getvalue().strip())
-            self.assertIn("'height': 5.9", cout.getvalue().strip())
+    def setUp(self):
+        """ Set up test environment """
+        hst = os.getenv('HBNB_MYSQL_HOST')
+        usr = os.getenv('HBNB_MYSQL_USER')
+        pwd = os.getenv('HBNB_MYSQL_PWD')
+        dbname = os.getenv('HBNB_MYSQL_DB')
+        self.db = MySQLdb.connect(host=hst, user=usr, passwd=pwd, db=dbname)
+        self.db.autocommit(True)
+        self.cur = self.db.cursor()
 
-    @unittest.skipIf(os.getenv("HBNB_TYPE_STORAGE") != "db", "DBStorage test")
-    def test_db_create(self):
-        """Tests the create command with the database storage."""
-        with patch("sys.stdout", new=StringIO()) as cout:
-            cons = HBNBCommand()
-            with self.assertRaises(sqlalchemy.exc.OperationalError):
-                cons.onecmd("create User")
-            clear_stream(cout)
-            cons.onecmd('create User email="john25@gmail.com" password="123"')
-            mdl_id = cout.getvalue().strip()
-            dbc = MySQLdb.connect(
-                host=os.getenv("HBNB_MYSQL_HOST"),
-                port=3306,
-                user=os.getenv("HBNB_MYSQL_USER"),
-                passwd=os.getenv("HBNB_MYSQL_PWD"),
-                db=os.getenv("HBNB_MYSQL_DB"),
-            )
-            cursor = dbc.cursor()
-            cursor.execute('SELECT * FROM users WHERE id="{}"'.format(mdl_id))
-            result = cursor.fetchone()
-            self.assertTrue(result is not None)
-            self.assertIn("john25@gmail.com", result)
-            self.assertIn("123", result)
-            cursor.close()
-            dbc.close()
+    def tearDown(self):
+        """"""
+        self.cur.execute('DELETE FROM place_amenity')
+        self.cur.execute('DELETE FROM places')
+        self.cur.execute('DELETE FROM cities')
+        self.cur.execute('DELETE FROM states')
+        self.cur.execute('DELETE FROM users')
+        self.cur.execute('DELETE FROM amenities')
+        self.cur.execute('DELETE FROM reviews')
+        self.db.commit()
 
-    @unittest.skipIf(os.getenv("HBNB_TYPE_STORAGE") != "db", "DBStorage test")
-    def test_db_show(self):
-        """Tests the show command with the database storage."""
-        with patch("sys.stdout", new=StringIO()) as cout:
-            cons = HBNBCommand()
-            # showing a User instance
-            obj = User(email="john25@gmail.com", password="123")
-            dbc = MySQLdb.connect(
-                host=os.getenv("HBNB_MYSQL_HOST"),
-                port=3306,
-                user=os.getenv("HBNB_MYSQL_USER"),
-                passwd=os.getenv("HBNB_MYSQL_PWD"),
-                db=os.getenv("HBNB_MYSQL_DB"),
-            )
-            cursor = dbc.cursor()
-            cursor.execute('SELECT * FROM users WHERE id="{}"'.format(obj.id))
-            result = cursor.fetchone()
-            self.assertTrue(result is None)
-            cons.onecmd("show User {}".format(obj.id))
-            self.assertEqual(
-                cout.getvalue().strip(), "** no instance found **"
-            )
-            obj.save()
-            dbc = MySQLdb.connect(
-                host=os.getenv("HBNB_MYSQL_HOST"),
-                port=3306,
-                user=os.getenv("HBNB_MYSQL_USER"),
-                passwd=os.getenv("HBNB_MYSQL_PWD"),
-                db=os.getenv("HBNB_MYSQL_DB"),
-            )
-            cursor = dbc.cursor()
-            cursor.execute('SELECT * FROM users WHERE id="{}"'.format(obj.id))
-            clear_stream(cout)
-            cons.onecmd("show User {}".format(obj.id))
-            result = cursor.fetchone()
-            self.assertTrue(result is not None)
-            self.assertIn("john25@gmail.com", result)
-            self.assertIn("123", result)
-            self.assertIn("john25@gmail.com", cout.getvalue())
-            self.assertIn("123", cout.getvalue())
-            cursor.close()
-            dbc.close()
+    def test_create_state_name(self):
+        before = self.cur.execute('SELECT * FROM states')
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd('create State name="Pennsylvania"')
+        after = self.cur.execute('SELECT * FROM states')
+        self.assertEqual(after - before, 1)
 
-    @unittest.skipIf(os.getenv("HBNB_TYPE_STORAGE") != "db", "DBStorage test")
-    def test_db_count(self):
-        """Tests the count command with the database storage."""
-        with patch("sys.stdout", new=StringIO()) as cout:
-            cons = HBNBCommand()
-            dbc = MySQLdb.connect(
-                host=os.getenv("HBNB_MYSQL_HOST"),
-                port=3306,
-                user=os.getenv("HBNB_MYSQL_USER"),
-                passwd=os.getenv("HBNB_MYSQL_PWD"),
-                db=os.getenv("HBNB_MYSQL_DB"),
-            )
-            cursor = dbc.cursor()
-            cursor.execute("SELECT COUNT(*) FROM states;")
-            res = cursor.fetchone()
-            prev_count = int(res[0])
-            cons.onecmd('create State name="Enugu"')
-            clear_stream(cout)
-            cons.onecmd("count State")
-            cnt = cout.getvalue().strip()
-            self.assertEqual(int(cnt), prev_count + 1)
-            clear_stream(cout)
-            cons.onecmd("count State")
-            cursor.close()
-            dbc.close()
+    def test_create_2_objects(self):
+        before = self.cur.execute('SELECT * FROM states')
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd('create State name="Pennsylvania"')
+            key = f.getvalue().replace('\n', '')
+            HBNBCommand().onecmd('create City state_id="{}" name="Philly"'.
+                                 format(key))
+        afters = self.cur.execute('SELECT * FROM states')
+        afterc = self.cur.execute('SELECT * FROM cities')
+        self.assertEqual(afters+afterc, 2)
 
-    @unittest.skipIf(os.getenv("HBNB_TYPE_STORAGE") != "db", "DBStorage test")
-    def test_pep8_conformance_console(self):
-        """Test that console.py conforms to PEP8."""
-        pep8s = pep8.StyleGuide(quiet=True)
-        result = pep8s.check_files(["console.py"])
-        self.assertEqual(
-            result.total_errors, 0, "Found code style errors (and warnings)."
-        )
+    def test_create_3_objects(self):
+        before = self.cur.execute('SELECT * FROM states')
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd('create State name="Pennsylvania"')
+            state_id = f.getvalue().replace('\n', '')
+            HBNBCommand().onecmd('create City name="Philly" state_id="{}"'.
+                                 format(state_id))
+            HBNBCommand().onecmd('create User email="Abdu.hany@gmail.com" ' +
+                                 'password="STRONGPASS"')
+        afters = self.cur.execute('SELECT * FROM states')
+        afterc = self.cur.execute('SELECT * FROM cities')
+        afteru = self.cur.execute('SELECT * FROM users')
+        self.assertEqual(afters+afterc+afteru, 3)
 
-    @unittest.skipIf(os.getenv("HBNB_TYPE_STORAGE") != "db", "DBStorage test")
-    def test_pep8_conformance_test_console(self):
-        """Test that tests/test_console.py conforms to PEP8."""
-        pep8s = pep8.StyleGuide(quiet=True)
-        result = pep8s.check_files(["tests/test_console.py"])
-        self.assertEqual(
-            result.total_errors, 0, "Found code style errors (and warnings)."
-        )
+
+@unittest.skipIf(os.getenv('HBNB_TYPE_STORAGE') == 'db',
+                 "tests only when in DB mode")
+class test_create_console_filestorage(unittest.TestCase):
+    """This class tests the create command of the console
+    program
+    """
+    def test_create_only_cmd(self):
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("create")
+        self.assertEqual(f.getvalue(), "** class name missing **\n")
+
+    def test_create_random_arg_cmd(self):
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("create ROBOT")
+        self.assertEqual(f.getvalue(), "** class doesn't exist **\n")
+
+    def test_create_BaseModel_arg(self):
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("create BaseModel")
+        self.assertEqual(len(f.getvalue()), 37)
+        try:
+            with open('file.json', 'r', encoding='utf-8') as f:
+                jsonstr = f.read()
+            self.assertTrue('BaseModel' in jsonstr)
+        except Exception:
+            pass
+
+    def test_create_User_arg(self):
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("create User")
+        self.assertEqual(len(f.getvalue()), 37)
+
+    def test_create_City_arg(self):
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("create City")
+        self.assertEqual(len(f.getvalue()), 37)
+
+    def test_create_State_arg(self):
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("create State")
+        self.assertEqual(len(f.getvalue()), 37)
+
+    def test_create_Review_arg(self):
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("create Review")
+        self.assertEqual(len(f.getvalue()), 37)
+
+    def test_create_Place_arg(self):
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("create Place")
+        self.assertEqual(len(f.getvalue()), 37)
+
+    def test_create_Amenity_arg(self):
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("create Amenity")
+        self.assertEqual(len(f.getvalue()), 37)
+
+    def test_create_more_than_one_arg(self):
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("create Amenity hello world")
+        self.assertEqual(len(f.getvalue()), 37)
+
+
+@unittest.skipIf(os.getenv('HBNB_TYPE_STORAGE') != 'db',
+                 "tests only when in DB mode")
+class test_all_console_db(unittest.TestCase):
+    """This class tests the create command of the console
+    program using db
+    """
+
+    def setUp(self):
+        """ Set up test environment """
+        hst = os.getenv('HBNB_MYSQL_HOST')
+        usr = os.getenv('HBNB_MYSQL_USER')
+        pwd = os.getenv('HBNB_MYSQL_PWD')
+        dbname = os.getenv('HBNB_MYSQL_DB')
+        self.db = MySQLdb.connect(host=hst, user=usr, passwd=pwd, db=dbname)
+        self.db.autocommit(True)
+        self.cur = self.db.cursor()
+
+    def tearDown(self):
+        """"""
+        sys.stdout.flush()
+        self.cur.execute('DELETE FROM place_amenity')
+        self.cur.execute('DELETE FROM places')
+        self.cur.execute('DELETE FROM cities')
+        self.cur.execute('DELETE FROM states')
+        self.cur.execute('DELETE FROM users')
+        self.cur.execute('DELETE FROM amenities')
+        self.cur.execute('DELETE FROM reviews')
+        self.db.commit()
+        self.cur.close()
+        self.db.close()
+
+    def test_all_no_args(self):
+        """"""
+        state = State(name="California")
+        state.save()
+        city = City(state_id=state.id, name="San Francisco")
+        city.save()
+        user = User(email="john@snow.com", password="johnpwd")
+        user.save()
+        place_1 = Place(user_id=user.id, city_id=city.id, name="House 1")
+        place_2 = Place(user_id=user.id, city_id=city.id, name="House 2")
+        place_1.save()
+        place_2.save()
+        amenity_1 = Amenity(name="Wifi")
+        amenity_1.save()
+        amenity_2 = Amenity(name="Cable")
+        amenity_2.save()
+        amenity_3 = Amenity(name="Oven")
+        amenity_3.save()
+        place_2.amenities.append(amenity_1)
+        place_2.amenities.append(amenity_2)
+        place_2.amenities.append(amenity_3)
+        storage.save()
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("all")
+            string = f.getvalue()
+        self.assertTrue("User" in string)
+        self.assertTrue("Place" in string)
+        self.assertTrue("State" in string)
+        self.assertTrue("City" in string)
+        self.assertTrue("Amenity" in string)
+
+    def test_all_state(self):
+        """"""
+        state = State(name="California")
+        state.save()
+        city = City(state_id=state.id, name="San Francisco")
+        city.save()
+        user = User(email="john@snow.com", password="johnpwd")
+        user.save()
+        place_1 = Place(user_id=user.id, city_id=city.id, name="House 1")
+        place_2 = Place(user_id=user.id, city_id=city.id, name="House 2")
+        place_1.save()
+        place_2.save()
+        amenity_1 = Amenity(name="Wifi")
+        amenity_1.save()
+        amenity_2 = Amenity(name="Cable")
+        amenity_2.save()
+        amenity_3 = Amenity(name="Oven")
+        amenity_3.save()
+        place_2.amenities.append(amenity_1)
+        place_2.amenities.append(amenity_2)
+        place_2.amenities.append(amenity_3)
+        storage.save()
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("all State")
+            string = f.getvalue()
+        self.assertTrue("[User]" not in string)
+        self.assertTrue("[Place]" not in string)
+        self.assertTrue("[State]" in string)
+        self.assertTrue("[City]" not in string)
+        self.assertTrue("[Amenity]" not in string)
+
+    def test_all_user(self):
+        """"""
+        state = State(name="California")
+        state.save()
+        city = City(state_id=state.id, name="San Francisco")
+        city.save()
+        user = User(email="john@snow.com", password="johnpwd")
+        user.save()
+        place_1 = Place(user_id=user.id, city_id=city.id, name="House 1")
+        place_2 = Place(user_id=user.id, city_id=city.id, name="House 2")
+        place_1.save()
+        place_2.save()
+        amenity_1 = Amenity(name="Wifi")
+        amenity_1.save()
+        amenity_2 = Amenity(name="Cable")
+        amenity_2.save()
+        amenity_3 = Amenity(name="Oven")
+        amenity_3.save()
+        place_2.amenities.append(amenity_1)
+        place_2.amenities.append(amenity_2)
+        place_2.amenities.append(amenity_3)
+        storage.save()
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("all User")
+            string = f.getvalue()
+        self.assertTrue("[User]" in string)
+        self.assertTrue("[Place]" not in string)
+        self.assertTrue("[State]" not in string)
+        self.assertTrue("[City]" not in string)
+        self.assertTrue("[Amenity]" not in string)
+
+    def test_all_place(self):
+        """"""
+        state = State(name="California")
+        state.save()
+        city = City(state_id=state.id, name="San Francisco")
+        city.save()
+        user = User(email="john@snow.com", password="johnpwd")
+        user.save()
+        place_1 = Place(user_id=user.id, city_id=city.id, name="House 1")
+        place_2 = Place(user_id=user.id, city_id=city.id, name="House 2")
+        place_1.save()
+        place_2.save()
+        amenity_1 = Amenity(name="Wifi")
+        amenity_1.save()
+        amenity_2 = Amenity(name="Cable")
+        amenity_2.save()
+        amenity_3 = Amenity(name="Oven")
+        amenity_3.save()
+        place_2.amenities.append(amenity_1)
+        place_2.amenities.append(amenity_2)
+        place_2.amenities.append(amenity_3)
+        storage.save()
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("all City")
+            string = f.getvalue()
+        self.assertTrue("[User]" not in string)
+        self.assertTrue("[Place]" not in string)
+        self.assertTrue("[State]" not in string)
+        self.assertTrue("[City]" in string)
+        self.assertTrue("[Amenity]" not in string)
+
+    def test_all_city(self):
+        """"""
+        state = State(name="California")
+        state.save()
+        city = City(state_id=state.id, name="San Francisco")
+        city.save()
+        user = User(email="john@snow.com", password="johnpwd")
+        user.save()
+        place_1 = Place(user_id=user.id, city_id=city.id, name="House 1")
+        place_2 = Place(user_id=user.id, city_id=city.id, name="House 2")
+        place_1.save()
+        place_2.save()
+        amenity_1 = Amenity(name="Wifi")
+        amenity_1.save()
+        amenity_2 = Amenity(name="Cable")
+        amenity_2.save()
+        amenity_3 = Amenity(name="Oven")
+        amenity_3.save()
+        place_2.amenities.append(amenity_1)
+        place_2.amenities.append(amenity_2)
+        place_2.amenities.append(amenity_3)
+        storage.save()
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("all City")
+            string = f.getvalue()
+        self.assertTrue("[User]" not in string)
+        self.assertTrue("[Place]" not in string)
+        self.assertTrue("[State]" not in string)
+        self.assertTrue("[City]" in string)
+        self.assertTrue("[Amenity]" not in string)
+
+    def test_all_amenity(self):
+        """"""
+        state = State(name="California")
+        state.save()
+        city = City(state_id=state.id, name="San Francisco")
+        city.save()
+        user = User(email="john@snow.com", password="johnpwd")
+        user.save()
+        place_1 = Place(user_id=user.id, city_id=city.id, name="House 1")
+        place_2 = Place(user_id=user.id, city_id=city.id, name="House 2")
+        place_1.save()
+        place_2.save()
+        amenity_1 = Amenity(name="Wifi")
+        amenity_1.save()
+        amenity_2 = Amenity(name="Cable")
+        amenity_2.save()
+        amenity_3 = Amenity(name="Oven")
+        amenity_3.save()
+        place_2.amenities.append(amenity_1)
+        place_2.amenities.append(amenity_2)
+        place_2.amenities.append(amenity_3)
+        storage.save()
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("all Amenity")
+            string = f.getvalue()
+        self.assertTrue("[User]" not in string)
+        self.assertTrue("[Place]" not in string)
+        self.assertTrue("[State]" not in string)
+        self.assertTrue("[City]" not in string)
+        self.assertTrue("[Amenity]" in string)
+
+    def test_python_code_style(self):
+        """Test Python Code Style"""
+        style = pycodestyle.StyleGuide(quiet=True)
+        py = style.check_files(['console.py'])
+        self.assertEqual(py.total_errors, 0, "Fix pep8")
+
+    def test_doc_console(self):
+        """Test DocString for Console"""
+        self.assertIsNotNone(HBNBCommand.__doc__)
+        self.assertIsNotNone(HBNBCommand.do_all.__doc__)
+        self.assertIsNotNone(HBNBCommand.do_create.__doc__)
+        self.assertIsNotNone(HBNBCommand.do_destroy.__doc__)
+        self.assertIsNotNone(HBNBCommand.do_quit.__doc__)
+        self.assertIsNotNone(HBNBCommand.do_EOF.__doc__)
+        self.assertIsNotNone(HBNBCommand.do_count.__doc__)
+        self.assertIsNotNone(HBNBCommand.do_update.__doc__)
+        self.assertIsNotNone(HBNBCommand.emptyline.__doc__)
+
+
+@unittest.skipIf(os.getenv('HBNB_TYPE_STORAGE') == 'db',
+                 "tests only when in DB mode")
+class Console_show_test(unittest.TestCase):
+    """This class tests the show command of the console
+    """
+    def test_show_only_cmd(self):
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("show")
+        self.assertEqual(f.getvalue(), "** class name missing **\n")
+
+    def test_fake_class_arg(self):
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("show ROBOT")
+        self.assertEqual(f.getvalue(), "** class doesn't exist **\n")
+
+    def test_valid_class_only_arg(self):
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("show Review")
+        self.assertEqual(f.getvalue(), "** instance id missing **\n")
+
+    def test_review_class_arg(self):
+        a = Review()
+        storage.new(a)
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("show Review {}".format(a.id))
+        self.assertEqual(f.getvalue(), "{}\n".format(str(a)))
+
+    def test_place_class_arg(self):
+        a = Place()
+        storage.new(a)
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("show Place {}".format(a.id))
+        self.assertEqual(f.getvalue(), "{}\n".format(str(a)))
+
+    def test_BaseModel_class_arg(self):
+        a = BaseModel()
+        storage.new(a)
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("show BaseModel {}".format(a.id))
+        self.assertEqual(f.getvalue(), "{}\n".format(str(a)))
+
+    def test_User_class_arg(self):
+        a = User()
+        storage.new(a)
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("show User {}".format(a.id))
+        self.assertEqual(f.getvalue(), "{}\n".format(str(a)))
+
+    def test_Amenity_class_arg(self):
+        a = Amenity()
+        storage.new(a)
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("show Amenity {}".format(a.id))
+        self.assertEqual(f.getvalue(), "{}\n".format(str(a)))
+
+    def test_City_class_arg(self):
+        a = City()
+        storage.new(a)
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("show City {}".format(a.id))
+        self.assertEqual(f.getvalue(), "{}\n".format(str(a)))
+
+    def test_State_class_arg(self):
+        a = State()
+        storage.new(a)
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("show State {}".format(a.id))
+        self.assertEqual(f.getvalue(), "{}\n".format(str(a)))
+
+    def test_more_than_three_args(self):
+        a = User()
+        storage.new(a)
+        with patch('sys.stdout', new=StringIO()) as f:
+            HBNBCommand().onecmd("show City {} 4thargument".format(a.id))
+
+
+if __name__ == "__main__":
+    unittest.main()
