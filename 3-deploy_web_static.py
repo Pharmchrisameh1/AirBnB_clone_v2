@@ -7,7 +7,7 @@ from os.path import basename
 from os.path import getsize
 
 
-env.hosts = ["100.25.143.157", "100.25.169.127"]
+env.hosts = ["34.207.212.22", "100.24.206.253"]
 env.user = "ubuntu"
 env.key_filename = "~/.ssh/id_rsa_alx"
 created_archive = None
