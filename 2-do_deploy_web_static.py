@@ -8,7 +8,7 @@ from datetime import datetime
 from os.path import isfile
 
 
-env.hosts = ['54.157.148.186', '54.158.189.0']
+env.hosts = ['34.207.212.22', '54.237.31.63']
 env.user = 'ubuntu'
 
 
